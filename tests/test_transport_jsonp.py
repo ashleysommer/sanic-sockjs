@@ -1,11 +1,11 @@
 from unittest import mock
 
-from aiohttp import web
-
 import pytest
-from aiohttp.test_utils import make_mocked_coro
+from sanic import request, exceptions
 
-from sockjs.transports import jsonp
+from tests.utils import make_mocked_coro
+
+from sanic_sockjs.transports import jsonp
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def make_transport(make_request, make_manager, make_handler, make_fut):
         manager = make_manager(handler)
         request = make_request(method, path, query_params=query_params)
         session = manager.get("TestSessionJsonP", create=True, request=request)
-        request.app.freeze()
+        #request.app.freeze()
         return jsonp.JSONPolling(manager, session, request)
 
     return maker
@@ -32,10 +32,14 @@ async def test_streaming_send(make_transport):
     assert stop
 
 
-async def test_process(make_transport, make_fut):
+async def test_process(make_transport, make_fut, mocker):
     transp = make_transport(query_params={"c": "calback"})
     transp.handle_session = make_fut(1)
     resp = await transp.process()
+    resp.protocol = mocker.Mock()
+    resp.protocol.push_data = make_fut(0)
+    resp.protocol.drain = make_fut(0)
+    await resp.stream()
     assert transp.handle_session.called
     assert resp.status == 200
 
@@ -44,26 +48,25 @@ async def test_process_no_callback(make_transport, make_fut):
     transp = make_transport()
     transp.session = mock.Mock()
     transp.session._remote_closed = make_fut(1)
-
-    resp = await transp.process()
+    with pytest.raises(exceptions.ServerError):
+        resp = await transp.process()
     assert transp.session._remote_closed.called
-    assert resp.status == 500
 
 
 async def test_process_bad_callback(make_transport, make_fut):
     transp = make_transport(query_params={"c": "calback!!!!"})
     transp.session = mock.Mock()
     transp.session._remote_closed = make_fut(1)
-
-    resp = await transp.process()
+    with pytest.raises(exceptions.ServerError):
+        resp = await transp.process()
     assert transp.session._remote_closed.called
-    assert resp.status == 500
+
 
 
 async def test_process_not_supported(make_transport):
     transp = make_transport(method="PUT")
-    resp = await transp.process()
-    assert resp.status == 400
+    with pytest.raises(exceptions.MethodNotSupported):
+        resp = await transp.process()
 
 
 async def xtest_process_bad_encoding(make_transport, make_fut):
@@ -71,8 +74,8 @@ async def xtest_process_bad_encoding(make_transport, make_fut):
     transp.request.read = make_fut(b"test")
     transp.request.content_type
     transp.request._content_type = "application/x-www-form-urlencoded"
-    resp = await transp.process()
-    assert resp.status == 500
+    with pytest.raises(exceptions.ServerError):
+        resp = await transp.process()
 
 
 async def xtest_process_no_payload(make_transport, make_fut):
@@ -80,15 +83,15 @@ async def xtest_process_no_payload(make_transport, make_fut):
     transp.request.read = make_fut(b"d=")
     transp.request.content_type
     transp.request._content_type = "application/x-www-form-urlencoded"
-    resp = await transp.process()
-    assert resp.status == 500
+    with pytest.raises(exceptions.ServerError):
+        resp = await transp.process()
 
 
 async def xtest_process_bad_json(make_transport, make_fut):
     transp = make_transport(method="POST")
     transp.request.read = make_fut(b"{]")
-    resp = await transp.process()
-    assert resp.status == 500
+    with pytest.raises(exceptions.ServerError):
+        resp = await transp.process()
 
 
 async def xtest_process_message(make_transport, make_fut):
@@ -103,4 +106,4 @@ async def xtest_process_message(make_transport, make_fut):
 async def test_session_has_request(make_transport, make_fut):
     transp = make_transport(method="POST")
     transp.session._remote_messages = make_fut(1)
-    assert isinstance(transp.session.request, web.Request)
+    assert isinstance(transp.session.request, request.Request)

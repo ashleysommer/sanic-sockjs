@@ -1,10 +1,11 @@
 import asyncio
 
-from aiohttp import web
+import pytest
 from multidict import CIMultiDict
 
-from sockjs import protocol
-
+from sanic_sockjs import protocol
+from sanic import exceptions
+from sanic import response
 
 async def test_info(make_route, make_request):
     route = make_route()
@@ -33,7 +34,7 @@ async def test_info_entropy(make_route, make_request):
 async def test_info_options(make_route, make_request):
     route = make_route()
     request = make_request("OPTIONS", "/sm/")
-    response = await route.info_options(request)
+    response = await route.info(request)
 
     assert response.status == 204
 
@@ -92,59 +93,45 @@ async def test_iframe_cache(make_route, make_request):
 
 async def test_handler_unknown_transport(make_route, make_request):
     route = make_route()
-    request = make_request("GET", "/sm/", match_info={"transport": "unknown"})
+    request = make_request("GET", "/sm/000/test1/unknown")
 
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPNotFound)
+    with pytest.raises(exceptions.NotFound):
+        res = await route.handler(request, "000", "test1", "unknown")
 
 
-async def test_handler_emptry_session(make_route, make_request):
+
+async def test_handler_empty_session(make_route, make_request):
     route = make_route()
-    request = make_request(
-        "GET", "/sm/", match_info={"transport": "websocket", "session": ""}
-    )
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPNotFound)
+    request = make_request("GET", "/sm/000//websocket")
+    with pytest.raises(exceptions.NotFound):
+        res = await route.handler(request, "000", "", "websocket")
+
 
 
 async def test_handler_bad_session_id(make_route, make_request):
     route = make_route()
-    request = make_request(
-        "GET",
-        "/sm/",
-        match_info={"transport": "websocket", "session": "test.1", "server": "000"},
-    )
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPNotFound)
-
+    request = make_request("GET","/sm/000/test.1/websocket")
+    with pytest.raises(exceptions.NotFound):
+        res = await route.handler(request, "000", "test.1", "websocket")
 
 async def test_handler_bad_server_id(make_route, make_request):
     route = make_route()
-    request = make_request(
-        "GET",
-        "/sm/",
-        match_info={"transport": "websocket", "session": "test", "server": "test.1"},
-    )
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPNotFound)
+    request = make_request("GET", "/sm/test.1/test/websocket")
+    with pytest.raises(exceptions.NotFound):
+        res = await route.handler(request, "test.1", "test", "websocket")
 
 
 async def test_new_session_before_read(make_route, make_request):
     route = make_route()
-    request = make_request(
-        "GET",
-        "/sm/",
-        match_info={"transport": "xhr_send", "session": "s1", "server": "000"},
-    )
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPNotFound)
-
+    request = make_request("GET", "/sm/000/s1/xhr_send")
+    res = await route.handler(request, "000", "s1", "xhr_send")
+    assert isinstance(res, response.HTTPResponse)
+    assert res.status == 404
+    assert res.headers.get('Set-Cookie', False)
 
 async def _test_transport(make_route, make_request):
     route = make_route()
-    request = make_request(
-        "GET", "/sm/", match_info={"transport": "xhr", "session": "s1", "server": "000"}
-    )
+    request = make_request("GET", "/sm/000/s1/xhr")
 
     params = []
 
@@ -153,20 +140,17 @@ async def _test_transport(make_route, make_request):
             params.append((manager, session, request))
 
         def process(self):
-            return web.HTTPOk()
+            return response.text(None, 200)
 
     route = make_route(handlers={"test": (True, Transport)})
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPOk)
+    res = await route.handler(request, "000", "s1", "xhr")
+    assert isinstance(res, response.HTTPResponse)
+    assert res.status is 200
     assert params[0] == (route.manager, route.manager["s1"], request)
 
 
 async def test_fail_transport(make_route, make_request):
-    request = make_request(
-        "GET",
-        "/sm/",
-        match_info={"transport": "test", "session": "session", "server": "000"},
-    )
+    request = make_request("GET", "/sm/000/session/test")
 
     params = []
 
@@ -178,16 +162,12 @@ async def test_fail_transport(make_route, make_request):
             raise Exception("Error")
 
     route = make_route(handlers={"test": (True, Transport)})
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPInternalServerError)
+    with pytest.raises(exceptions.ServerError):
+        res = await route.handler(request, "000", "session", "test")
 
 
 async def test_release_session_for_failed_transport(make_route, make_request):
-    request = make_request(
-        "GET",
-        "/sm/",
-        match_info={"transport": "test", "session": "s1", "server": "000"},
-    )
+    request = make_request("GET", "/sm/000/s1/test")
 
     class Transport:
         def __init__(self, manager, session, request):
@@ -199,30 +179,33 @@ async def test_release_session_for_failed_transport(make_route, make_request):
             raise Exception("Error")
 
     route = make_route(handlers={"test": (True, Transport)})
-    res = await route.handler(request)
-    assert isinstance(res, web.HTTPInternalServerError)
+    with pytest.raises(exceptions.ServerError):
+        res = await route.handler(request, "000", "s1", "test")
 
     s1 = route.manager["s1"]
     assert not route.manager.is_acquired(s1)
 
 
 async def test_raw_websocket(make_route, make_request, mocker):
-    ws = mocker.patch("sockjs.route.RawWebSocketTransport")
+    wst = mocker.patch("sanic_sockjs.route.RawWebSocketTransport")
     loop = asyncio.get_event_loop()
-    ws.return_value.process.return_value = loop.create_future()
-    ws.return_value.process.return_value.set_result(web.HTTPOk())
+    wst.return_value.process.return_value = loop.create_future()
+    wst.return_value.process.return_value.set_result(response.text(None, 200))
 
+    raw_ws = mocker.Mock()
     route = make_route()
     request = make_request("GET", "/sm/", headers=CIMultiDict({}))
-    res = await route.websocket(request)
+    res = await route.websocket(request, raw_ws)
 
-    assert isinstance(res, web.HTTPOk)
-    assert ws.called
-    assert ws.return_value.process.called
+    assert isinstance(res, response.HTTPResponse)
+    assert res.status is 200
+    assert wst.called
+    assert wst.return_value.process.called
 
 
 async def _test_raw_websocket_fail(make_route, make_request):
     route = make_route()
     request = make_request("GET", "/sm/")
-    res = await route.websocket(request)
-    assert not isinstance(res, web.HTTPNotFound)
+    with pytest.raises(exceptions.NotFound):
+        res = await route.websocket(request)
+

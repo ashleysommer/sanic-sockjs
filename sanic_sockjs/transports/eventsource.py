@@ -1,7 +1,6 @@
 """ iframe-eventsource transport """
-from aiohttp import web, hdrs
-from sockjs.protocol import ENCODING
-
+from sanic.response import StreamingHTTPResponse
+from ..protocol import ENCODING
 from .base import StreamingTransport
 from .utils import CACHE_CONTROL, session_cookie
 
@@ -19,17 +18,16 @@ class EventsourceTransport(StreamingTransport):
 
     async def process(self):
         headers = (
-            (hdrs.CONTENT_TYPE, "text/event-stream"),
-            (hdrs.CACHE_CONTROL, CACHE_CONTROL),
+            ('Content-Type', "text/event-stream"),
+            ('Cache-Control', CACHE_CONTROL),
         )
         headers += session_cookie(self.request)
 
+        async def stream(_response):
+            nonlocal self
+            self.response = _response
+            await _response.write(b"\r\n")
+            # handle session
+            await self.handle_session()
         # open sequence (sockjs protocol)
-        resp = self.response = web.StreamResponse(headers=headers)
-        await resp.prepare(self.request)
-        await resp.write(b"\r\n")
-
-        # handle session
-        await self.handle_session()
-
-        return resp
+        return StreamingHTTPResponse(stream, headers=headers)

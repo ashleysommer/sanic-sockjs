@@ -1,24 +1,31 @@
 import asyncio
-
+from time import time
 from datetime import timedelta
 from unittest import mock
 
 import pytest
 
-from aiohttp import web
-from aiohttp.web_urldispatcher import UrlMappingMatchInfo
-from aiohttp.test_utils import make_mocked_request, make_mocked_coro
+from sanic import Sanic
+# from aiohttp import web
+# from aiohttp.web_urldispatcher import UrlMappingMatchInfo
+# from aiohttp.test_utils import make_mocked_request, make_mocked_coro
 from multidict import CIMultiDict
 from yarl import URL
 
-from sockjs import Session, SessionManager, transports
-from sockjs.route import SockJSRoute
+from sanic_sockjs import Session, SessionManager, transports
+from sanic_sockjs.route import SockJSRoute
 
+from tests.utils import make_mocked_coro, make_mocked_request
+
+
+@pytest.yield_fixture
+def app():
+    app =  Sanic("pytest%s" % str(time()))
+    yield app
 
 @pytest.fixture
-def app():
-    return web.Application()
-
+def test_cli(loop, app, sanic_client):
+    return loop.run_until_complete(sanic_client(app))
 
 @pytest.fixture
 def make_fut():
@@ -69,7 +76,8 @@ def make_route(make_handler, app):
 
 @pytest.fixture
 def make_request(app):
-    def maker(method, path, query_params={}, headers=None, match_info=None):
+    def maker(method, path, query_params=None, headers=None):
+        nonlocal app
         path = URL(path)
         if query_params:
             path = path.with_query(query_params)
@@ -94,12 +102,7 @@ def make_request(app):
         transport = mock.Mock()
         transport._drain_helper = make_mocked_coro()
         loop = asyncio.get_event_loop()
-        ret = make_mocked_request(method, str(path), headers, writer=writer, loop=loop)
-
-        if match_info is None:
-            match_info = UrlMappingMatchInfo({}, mock.Mock())
-            match_info.add_app(app)
-        ret._match_info = match_info
+        ret = make_mocked_request(method, str(path).encode(), headers, writer=writer, loop=loop, app=app)
         return ret
 
     return maker

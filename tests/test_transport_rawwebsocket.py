@@ -2,12 +2,11 @@ from unittest import mock
 from asyncio import Future
 
 import pytest
+from websockets import framing
 
-from sockjs.exceptions import SessionIsClosed
-from sockjs.protocol import FRAME_CLOSE, FRAME_HEARTBEAT
-from sockjs.transports.rawwebsocket import RawWebSocketTransport
-
-from aiohttp import WSMessage, WSMsgType
+from sanic_sockjs.exceptions import SessionIsClosed
+from sanic_sockjs.protocol import FRAME_CLOSE, FRAME_HEARTBEAT
+from sanic_sockjs.transports.rawwebsocket import RawWebSocketTransport
 
 
 @pytest.fixture
@@ -18,7 +17,7 @@ def make_transport(make_request, make_fut):
         session._remote_closed = make_fut(1)
         session._wait = make_fut((FRAME_CLOSE, ""))
         request = make_request(method, path, query_params=query_params)
-        request.app.freeze()
+        #request.app.freeze()
         return RawWebSocketTransport(manager, session, request)
 
     return maker
@@ -27,8 +26,8 @@ def make_transport(make_request, make_fut):
 async def xtest_ticks_pong(make_transport, make_fut):
     transp = make_transport()
 
-    pong = WSMessage(type=WSMsgType.PONG, data=b"", extra="")
-    close = WSMessage(type=WSMsgType.closing, data=b"", extra="")
+    pong = WSMessage(type=framing.OP_PONG, data=b"", extra="")
+    close = WSMessage(type=framing.OP_CLOSE, data=b"", extra="")
 
     future = Future()
     future.set_result(pong)

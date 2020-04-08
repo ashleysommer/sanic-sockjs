@@ -1,13 +1,19 @@
 """raw websocket transport."""
 import asyncio
-from aiohttp import web
-
-from asyncio import ensure_future
+from asyncio import ensure_future, CancelledError
+from websockets import framing, ConnectionClosed
 
 from .base import Transport
 from ..exceptions import SessionIsClosed
 from ..protocol import FRAME_CLOSE, FRAME_MESSAGE, FRAME_MESSAGE_BLOB, FRAME_HEARTBEAT
 
+class WebSocketHelper(object):
+    __slots__ = ('raw_ws',)
+    def __init__(self, raw_ws):
+        self.raw_ws = raw_ws
+
+    async def send_str(self, data):
+        return await self.raw_ws.send(data)
 
 class RawWebSocketTransport(Transport):
     async def server(self, ws, session):
@@ -35,24 +41,26 @@ class RawWebSocketTransport(Transport):
 
     async def client(self, ws, session):
         while True:
-            msg = await ws.receive()
-
-            if msg.type == web.WSMsgType.text:
-                if not msg.data:
-                    continue
-                await self.session._remote_message(msg.data)
-            elif msg.type == web.WSMsgType.close:
-                await self.session._remote_close()
-            elif msg.type in (web.WSMsgType.closed, web.WSMsgType.closing):
-                await self.session._remote_closed()
+            try:
+                data = await ws.receive()
+            except (ConnectionClosed, CancelledError) as e:
+                await session._remote_closed()
+                await ws.close(reason="client closed")
                 break
-            elif msg.type == web.WSMsgType.PONG:
-                self.session._tick()
+            if not data:
+                continue
+            await self.session._remote_message(data)
+            # elif msg.type == framing.OP_CLOSE:
+            #     await self.session._remote_close()
+            # elif msg.type in (0x100, 0x101): #aiohttp CLOSING and CLOSED
+            #     await self.session._remote_closed()
+            #     break
+            # elif msg.type == framing.OP_PONG:
+            #     self.session._tick()
 
-    async def process(self):
+    async def process(self, raw_ws):
         # start websocket connection
-        ws = self.ws = web.WebSocketResponse(autoping=False)
-        await ws.prepare(self.request)
+        ws = self.ws = WebSocketHelper(raw_ws)
 
         try:
             await self.manager.acquire(self.session)

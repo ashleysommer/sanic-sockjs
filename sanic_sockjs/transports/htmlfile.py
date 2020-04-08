@@ -1,7 +1,7 @@
 """ iframe-htmlfile transport """
 import re
-from aiohttp import web, hdrs
-
+from sanic import exceptions
+from sanic.response import StreamingHTTPResponse
 from ..protocol import dumps, ENCODING
 from .base import StreamingTransport
 from .utils import CACHE_CONTROL, session_cookie, cors_headers
@@ -43,34 +43,34 @@ class HTMLFileTransport(StreamingTransport):
         request = self.request
 
         try:
-            callback = request.query.get("c", None)
+            callback = request.query_args.get("c", None)
         except Exception:
-            callback = request.GET.get("c", None)
+            callback = request.args.get("c", None)
 
         if callback is None:
             await self.session._remote_closed()
-            return web.HTTPInternalServerError(text='"callback" parameter required')
+            raise exceptions.ServerError('"callback" parameter required')
 
         elif not self.check_callback.match(callback):
             await self.session._remote_closed()
-            return web.HTTPInternalServerError(text='invalid "callback" parameter')
+            raise exceptions.ServerError('invalid "callback" parameter')
 
         headers = (
-            (hdrs.CONTENT_TYPE, "text/html; charset=UTF-8"),
-            (hdrs.CACHE_CONTROL, CACHE_CONTROL),
-            (hdrs.CONNECTION, "close"),
+            ('Content-Type', "text/html; charset=UTF-8"),
+            ('Cache-Control', CACHE_CONTROL),
+            ('Connection', "close"),
         )
         headers += session_cookie(request)
         headers += cors_headers(request.headers)
 
+        async def stream(_response):
+            nonlocal self
+            self.response = _response
+            await _response.write(
+                b"".join((PRELUDE1, callback.encode("utf-8"), PRELUDE2, b" " * 1024))
+            )
+            # handle session
+            await self.handle_session()
         # open sequence (sockjs protocol)
-        resp = self.response = web.StreamResponse(headers=headers)
-        await resp.prepare(self.request)
-        await resp.write(
-            b"".join((PRELUDE1, callback.encode("utf-8"), PRELUDE2, b" " * 1024))
-        )
+        return StreamingHTTPResponse(stream, headers=headers)
 
-        # handle session
-        await self.handle_session()
-
-        return resp

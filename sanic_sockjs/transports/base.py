@@ -1,6 +1,4 @@
-import aiohttp
 import asyncio
-
 from ..exceptions import SessionIsAcquired, SessionIsClosed
 from ..protocol import close_frame, ENCODING
 from ..protocol import STATE_CLOSING, STATE_CLOSED, FRAME_CLOSE, FRAME_MESSAGE
@@ -73,8 +71,8 @@ class StreamingTransport(Transport):
                             stop = await self.send(text)
                             if stop:
                                 break
-                except asyncio.CancelledError:
-                    await self.session._remote_close(exc=aiohttp.ClientConnectionError)
+                except asyncio.CancelledError as ce:
+                    await self.session._remote_close(exc=ce)
                     await self.session._remote_closed()
                     raise
                 except SessionIsClosed:

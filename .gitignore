@@ -21,3 +21,4 @@ nosetests.xml
 pyrami_sockjs/coverage.xml
 .cache
 .pytest_cache
+.venv/

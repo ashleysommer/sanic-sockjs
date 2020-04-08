@@ -1,30 +1,30 @@
 import asyncio
 import logging
-from aiohttp import web
+from sanic import Sanic
 
-import sockjs
-from sockjs.transports.eventsource import EventsourceTransport
-from sockjs.transports.htmlfile import HTMLFileTransport
-from sockjs.transports.xhrstreaming import XHRStreamingTransport
+import sanic_sockjs
+from sanic_sockjs.transports.eventsource import EventsourceTransport
+from sanic_sockjs.transports.htmlfile import HTMLFileTransport
+from sanic_sockjs.transports.xhrstreaming import XHRStreamingTransport
 
 
 async def echoSession(msg, session):
-    if msg.type == sockjs.MSG_MESSAGE:
+    if msg.type == sanic_sockjs.MSG_MESSAGE:
         session.send(msg.data)
 
 
 async def closeSessionHander(msg, session):
-    if msg.type == sockjs.MSG_OPEN:
+    if msg.type == sanic_sockjs.MSG_OPEN:
         session.close()
 
 
 async def broadcastSession(msg, session):
-    if msg.type == sockjs.MSG_OPEN:
+    if msg.type == sanic_sockjs.MSG_OPEN:
         session.manager.broadcast(msg.data)
 
 
 if __name__ == '__main__':
-    """ Sockjs tests server """
+    """ Sanic-Sockjs tests server """
     loop = asyncio.get_event_loop()
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s %(message)s')
@@ -33,19 +33,19 @@ if __name__ == '__main__':
     EventsourceTransport.maxsize = 4096
     XHRStreamingTransport.maxsize = 4096
 
-    app = web.Application(loop=loop)
+    app = Sanic(__name__)
 
-    sockjs.add_endpoint(
+    sanic_sockjs.add_endpoint(
         app, echoSession, name='echo', prefix='/echo')
-    sockjs.add_endpoint(
+    sanic_sockjs.add_endpoint(
         app, closeSessionHander, name='close', prefix='/close')
-    sockjs.add_endpoint(
+    sanic_sockjs.add_endpoint(
         app, broadcastSession, name='broadcast', prefix='/broadcast')
-    sockjs.add_endpoint(
+    sanic_sockjs.add_endpoint(
         app, echoSession, name='wsoff', prefix='/disabled_websocket_echo',
         disable_transports=('websocket',))
-    sockjs.add_endpoint(
+    sanic_sockjs.add_endpoint(
         app, echoSession, name='cookie', prefix='/cookie_needed_echo',
         cookie_needed=True)
 
-    web.run_app(app)
+    app.run("127.0.0.1", 8001)

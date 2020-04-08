@@ -1,9 +1,9 @@
 include LICENSE.txt
 include CHANGES.txt
 include README.rst
-include Makefile
 include sockjs-testsrv.py
-graft sockjs
+include requirements.txt
+graft sanic_sockjs
 graft docs
 graft examples
 graft tests

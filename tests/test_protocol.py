@@ -1,6 +1,6 @@
 import json
 
-from sockjs import protocol
+from sanic_sockjs import protocol
 
 
 def test_encode():

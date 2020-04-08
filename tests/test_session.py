@@ -2,18 +2,16 @@ import asyncio
 from unittest import mock
 from datetime import datetime, timedelta
 
-from aiohttp import web
-
 import pytest
 
 from asyncio import ensure_future
-
-from sockjs import Session, SessionIsClosed, protocol, SessionIsAcquired
+from sanic import request
+from sanic_sockjs import Session, SessionIsClosed, protocol, SessionIsAcquired
 
 
 class TestSession:
     async def test_ctor(self, mocker, make_handler, make_request):
-        dt = mocker.patch("sockjs.session.datetime")
+        dt = mocker.patch("sanic_sockjs.session.datetime")
         now = dt.now.return_value = datetime.now()
 
         handler = make_handler([])
@@ -57,7 +55,7 @@ class TestSession:
         assert str(session) == expected
 
     async def test_tick(self, mocker, make_session):
-        dt = mocker.patch("sockjs.session.datetime")
+        dt = mocker.patch("sanic_sockjs.session.datetime")
         now = dt.now.return_value = datetime.now()
         session = make_session("test")
 
@@ -66,7 +64,7 @@ class TestSession:
         assert session.expires == now + session.timeout
 
     async def test_tick_different_timeoutk(self, mocker, make_session):
-        dt = mocker.patch("sockjs.session.datetime")
+        dt = mocker.patch("sanic_sockjs.session.datetime")
         now = dt.now.return_value = datetime.now()
         session = make_session("test", timeout=timedelta(seconds=20))
 
@@ -75,7 +73,7 @@ class TestSession:
         assert session.expires == now + timedelta(seconds=20)
 
     async def test_tick_custom(self, mocker, make_session):
-        dt = mocker.patch("sockjs.session.datetime")
+        dt = mocker.patch("sanic_sockjs.session.datetime")
         now = dt.now.return_value = datetime.now()
         session = make_session("test", timeout=timedelta(seconds=20))
 
@@ -376,7 +374,7 @@ class TestSessionManager:
     async def test_request_available(self, make_manager, make_request):
         sm = make_manager()
         s = sm.get("test", True, make_request("GET", "/test/"))
-        assert isinstance(s.request, web.Request)
+        assert isinstance(s.request, request.Request)
 
     async def test_fresh(self, make_manager, make_session):
         sm = make_manager()

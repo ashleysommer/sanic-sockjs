@@ -1,46 +1,41 @@
 SockJS server based on Asyncio (PEP 3156)
 =========================================
 
-.. image :: https://secure.travis-ci.org/aio-libs/sockjs.svg
-  :target:  https://secure.travis-ci.org/aio-libs/sockjs
+.. image :: https://secure.travis-ci.org/ashleysommer/sanic-sockjs.svg
+  :target:  https://secure.travis-ci.org/ashleysommer/sanic-sockjs
 
-`sockjs` is a `SockJS <http://sockjs.org>`_ integration for
-`aiohttp <https://github.com/aio-libs/aiohttp/>`_.  SockJS interface
-is implemented as a `aiohttp` route. Its possible to create any number
+`sanic_sockjs` is a `SockJS <http://sockjs.org>`_ integration for
+`Sanic <https://github.com/huge-success/sanic/>`_.  SockJS interface
+is implemented as a `Sanic` route. Its possible to create any number
 of different sockjs routes, ie `/sockjs/*` or
 `/mycustom-sockjs/*`. You can provide different session implementation
 and management for each sockjs route.
 
-Simple aiohttp web server is required::
+Simple Sanic web server is required::
 
    [server:main]
    use = egg:gunicorn#main
    host = 0.0.0.0
    port = 8080
-   worker = aiohttp.worker.GunicornWebWorker
+   worker = sanic.worker.GunicornWorker
 
 
 Example of sockjs route::
 
    def main(global_settings, **settings):
-       app = web.Application(loop=loop)
-       app.router.add_route('GET', '/', index)
-       sockjs.add_endpoint(app, prefix='/sockjs', handler=chatSession)
+       app = Sanic(__main__)
+       @app.get('/')
+       def index(request):
+           ...
 
-       handler = app.make_handler()
-       srv = loop.run_until_complete(
-           loop.create_server(handler, '127.0.0.1', 8080))
-       print("Server started at http://127.0.0.1:8080")
-       try:
-           loop.run_forever()
-        except KeyboardInterrupt:
-           srv.close()
-           loop.run_until_complete(handler.finish_connections())
+
+       sanic_sockjs.add_endpoint(app, prefix='/sockjs', handler=chatSession)
+       app.run("127.0.0.1", 8080)
 
 
 Client side code::
 
-  <script src="//cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.js"></script>
   <script>
       var sock = new SockJS('http://localhost:8080/sockjs');
 
@@ -82,19 +77,17 @@ Supported transports
 Requirements
 ------------
 
-- Python 3.4
+- Python >= 3.6
 
-- gunicorn 19.2.0
-
-- aiohttp https://github.com/aio-libs/aiohttp
+- Sanic >= 19.3.1 https://github.com/huge-success/sanic
 
 
 Examples
 --------
 
-You can find several `examples` in the sockjs repository at github.
+You can find several `examples` in the sanic_sockjs repository at github.
 
-https://github.com/aio-libs/sockjs/tree/master/examples
+https://github.com/ashleysommer/sanic-sockjs/tree/master/examples
 
 
 License

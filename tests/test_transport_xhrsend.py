@@ -1,8 +1,7 @@
-from aiohttp import web
-
 import pytest
+from sanic import request, exceptions
 
-from sockjs.transports import xhrsend
+from sanic_sockjs.transports import xhrsend
 
 
 @pytest.fixture
@@ -11,7 +10,7 @@ def make_transport(make_manager, make_request, make_handler, make_fut):
         handler = make_handler(None)
         manager = make_manager(handler)
         request = make_request(method, path, query_params=query_params)
-        request.app.freeze()
+        #request.app.freeze()
         session = manager.get("TestSessionXhrSend", create=True, request=request)
         return xhrsend.XHRSendTransport(manager, session, request)
 
@@ -20,9 +19,8 @@ def make_transport(make_manager, make_request, make_handler, make_fut):
 
 async def test_not_supported_meth(make_transport):
     transp = make_transport(method="PUT")
-    resp = await transp.process()
-    assert resp.status == 403
-
+    with pytest.raises(exceptions.MethodNotSupported):
+        resp = await transp.process()
 
 async def xtest_no_payload(make_transport, make_fut):
     transp = make_transport()
@@ -56,4 +54,4 @@ async def test_OPTIONS(make_transport):
 async def test_session_has_request(make_transport, make_fut):
     transp = make_transport(method="POST")
     transp.session._remote_messages = make_fut(1)
-    assert isinstance(transp.session.request, web.Request)
+    assert isinstance(transp.session.request, request.Request)

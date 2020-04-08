@@ -1,5 +1,4 @@
 import http.cookies
-from aiohttp import hdrs
 from datetime import datetime, timedelta
 
 
@@ -7,15 +6,15 @@ CACHE_CONTROL = "no-store, no-cache, no-transform, must-revalidate, max-age=0"
 
 
 def cors_headers(headers, nocreds=False):
-    origin = headers.get(hdrs.ORIGIN, "*")
-    cors = ((hdrs.ACCESS_CONTROL_ALLOW_ORIGIN, origin),)
+    origin = headers.get('Origin', "*")
+    cors = (('Access-Control-Allow-Origin', origin),)
 
-    ac_headers = headers.get(hdrs.ACCESS_CONTROL_REQUEST_HEADERS)
+    ac_headers = headers.get('Access-Control-Request-Headers')
     if ac_headers:
-        cors += ((hdrs.ACCESS_CONTROL_ALLOW_HEADERS, ac_headers),)
+        cors += (('Access-Control-Allow-Headers', ac_headers),)
 
     if origin != "*":
-        return cors + ((hdrs.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"),)
+        return cors + (('Access-Control-Allow-Credentials', "true"),)
     else:
         return cors
 
@@ -25,7 +24,7 @@ def session_cookie(request):
     cookies = http.cookies.SimpleCookie()
     cookies["JSESSIONID"] = cookie
     cookies["JSESSIONID"]["path"] = "/"
-    return ((hdrs.SET_COOKIE, cookies["JSESSIONID"].output(header="")[1:]),)
+    return (('Set-Cookie', cookies["JSESSIONID"].output(header="")[1:]),)
 
 
 td365 = timedelta(days=365)
@@ -37,7 +36,7 @@ td365seconds = str(
 def cache_headers():
     d = datetime.now() + td365
     return (
-        (hdrs.ACCESS_CONTROL_MAX_AGE, td365seconds),
-        (hdrs.CACHE_CONTROL, "max-age=%s, public" % td365seconds),
-        (hdrs.EXPIRES, d.strftime("%a, %d %b %Y %H:%M:%S")),
+        ('Access-Control-Max-Age', td365seconds),
+        ('Cache-Control', "max-age=%s, public" % td365seconds),
+        ('Expires', d.strftime("%a, %d %b %Y %H:%M:%S")),
     )
